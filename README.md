@@ -16,7 +16,7 @@ A tech-based solution for detecting and capturing plastic waste in rivers using 
 - Requires a virtual environment (optional): python -m venv venv and activate with venv\Scripts\activate (Windows) or source venv/bin/activate (Mac/Linux).
 
 ## Demo
-Watch the [demo video](demo.mp4) (local file, not uploaded) to see the system in action:
+Watch the [demo video](test_video.mp4) (local file, not uploaded) to see the system in action:
 - Drone simulation moving toward detected plastic.
 - CV2 window showing bounding box detection.
 - CSV logging of detection data.
