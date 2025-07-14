@@ -7,9 +7,10 @@ A tech-based solution for detecting and capturing plastic waste in rivers using 
 3. Run the script: `python river_plastic_capture.py
 
 ## Current Features
-- Detects plastic objects (bottles, cups) in a video feed, webcam, or image using YOLOv5.
-- Displays green bounding boxes for confirmed plastic (e.g., bottle) and blue for fallback objects.
-- Simulates drone movement toward detected plastic using Pygame.
+- Detects objects in a video feed, webcam, or image using YOLOv5 and labels them as 'plastic_object'.
+- Displays green bounding boxes with confidence scores in a separate CV2 window.
+- Simulates drone movement toward detected plastic using Pygame, with a red dot marking the plastic and a green dot for the drone (refinement pending).
+- Logs detection details (timestamp, type, confidence, coordinates) to plastic_detections.csv.
 - Tested with image input, with debug logging for all detections.
 
 ## Future Work
