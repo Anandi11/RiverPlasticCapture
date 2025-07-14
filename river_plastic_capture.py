@@ -21,35 +21,20 @@ def detect_plastic(frame):
     detections = results.xyxy[0].numpy()  # [x1, y1, x2, y2, confidence, class]
     plastic_detections = []
     print("All detections:", [(model.names[int(det[5])], det[4]) for det in detections])
-    
     for det in detections:
-        class_name = model.names[int(det[5])]
-        confidence = det[4]
-        if confidence > 0.3 and class_name in ['bottle', 'cup']:
+        if det[4] > 0.3:  # Any detection above 0.3 confidence
             x_center = (det[0] + det[2]) / 2
             y_center = (det[1] + det[3]) / 2
+            # Override label to "plastic_object" for this project
             plastic_detections.append({
-                'type': class_name,
-                'confidence': confidence,
+                'type': 'plastic_object',
+                'confidence': det[4],
                 'center': (x_center, y_center)
             })
             x1, y1, x2, y2 = map(int, det[:4])
             cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
-            cv2.putText(frame, f"{class_name} ({confidence:.2f})", (x1, y1 - 10),
+            cv2.putText(frame, f"plastic_object ({det[4]:.2f})", (x1, y1 - 10),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
-        elif confidence > 0.5 and class_name != 'bird':  # Fallback detection
-            x_center = (det[0] + det[2]) / 2
-            y_center = (det[1] + det[3]) / 2
-            plastic_detections.append({
-                'type': class_name,
-                'confidence': confidence,
-                'center': (x_center, y_center)
-            })
-            x1, y1, x2, y2 = map(int, det[:4])
-            cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 0, 255), 2)
-            cv2.putText(frame, f"Fallback: {class_name} ({confidence:.2f})", (x1, y1 - 10),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 2)
-
     return plastic_detections, frame
 
 # Function to update drone position
@@ -68,39 +53,40 @@ def update_drone_position(target_pos):
 # Main function
 def main():
     global TARGET_POS
-    frame = cv2.imread('test_image1.jpeg')
+    # Load image
+    frame = cv2.imread('test_image2.jpeg')
     if frame is None:
         print("Error: Could not load image.")
         return
 
     running = True
     while running:
-        # Detect plastic in the frame
+        # Detect plastic in the frame (only once for image)
         detections, annotated_frame = detect_plastic(frame)
-        if detections:
-            TARGET_POS = [detections[0]['center'][0], detections[0]['center'][1]]
+        if detections and not TARGET_POS:
+            TARGET_POS = [detections[0]['center'][0], detections[0]['center'][1]]  # Set target once
             print("Target set to:", TARGET_POS)
 
         # Update drone position
-        update_drone_position(TARGET_POS)
+        moving = update_drone_position(TARGET_POS)
 
         # Render simulation
-        screen.fill((0, 0, 255))  # Blue background
+        screen.fill((0, 0, 255))  # Blue background (water)
         if TARGET_POS:
-            pygame.draw.circle(screen, (255, 0, 0), (int(TARGET_POS[0] % SCREEN_WIDTH), int(TARGET_POS[1] % SCREEN_HEIGHT)), 10)
-        pygame.draw.circle(screen, (0, 255, 0), (int(DRONE_POS[0]), int(DRONE_POS[1])), 15)
+            pygame.draw.circle(screen, (255, 0, 0), (int(TARGET_POS[0] % SCREEN_WIDTH), int(TARGET_POS[1] % SCREEN_HEIGHT)), 10)  # Plastic
+        pygame.draw.circle(screen, (0, 255, 0), (int(DRONE_POS[0]), int(DRONE_POS[1])), 15)  # Drone
         pygame.display.flip()
-        clock.tick(30)
+        clock.tick(30)  # 30 FPS
 
-        # Show video feed
+        # Show detection result in separate CV2 window
         cv2.imshow('Plastic Detection', annotated_frame)
+        if cv2.waitKey(1) & 0xFF == ord('q'):
+            running = False
 
-        # Handle events
+        # Handle Pygame events
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 running = False
-        if cv2.waitKey(1) & 0xFF == ord('q'):
-            running = False
 
     pygame.quit()
     cv2.destroyAllWindows()
