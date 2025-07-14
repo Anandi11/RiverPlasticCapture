@@ -5,42 +5,34 @@ import time
 import csv
 from datetime import datetime
 
-# Initialize YOLOv5 model
 model = torch.hub.load('ultralytics/yolov5', 'yolov5s', pretrained=True)
 
-# Initialize Pygame for simulation
 pygame.init()
 SCREEN_WIDTH, SCREEN_HEIGHT = 800, 600
 screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
 pygame.display.set_caption("Drone Plastic Capture Simulation")
 clock = pygame.time.Clock()
-DRONE_POS = [SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2]  # Starting position
+DRONE_POS = [SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2] 
 TARGET_POS = None
 
-# Video dimensions (assuming 640x480 as default for YOLOv5 input)
-IMG_WIDTH, IMG_HEIGHT = 640, 480
+IMG_WIDTH, IMG_HEIGHT = None, None 
 
-# Initialize CSV file
 csv_file = open('plastic_detections.csv', 'w', newline='')
 csv_writer = csv.writer(csv_file)
 csv_writer.writerow(['Timestamp', 'Object_Type', 'Confidence', 'X_Center', 'Y_Center'])
 
-# Function to detect plastic in a frame
 def detect_plastic(frame):
     results = model(frame)
-    detections = results.xyxy[0].numpy()  # [x1, y1, x2, y2, confidence, class]
+    detections = results.xyxy[0].numpy() 
     plastic_detections = []
-    print("All detections:", [(model.names[int(det[5])], det[4]) for det in detections])  # Debug all detections
+    print("All detections:", [(model.names[int(det[5])], det[4]) for det in detections])
     for det in detections:
-        if det[4] > 0.1:  # Confidence threshold
+        if det[4] > 0.05:
             x1, y1, x2, y2 = map(int, det[:4])
             x_center = (x1 + x2) / 2
             y_center = (y1 + y2) / 2
-            obj_class = model.names[int(det[5])]
-            # Relabel 'boat' or 'person' to 'bottle' if area is small (typical for a bottle)
-            area = (x2 - x1) * (y2 - y1)
-            if obj_class in ['boat', 'person'] and area < 5000:  # Arbitrary small area threshold
-                obj_class = 'bottle'
+    
+            obj_class = 'plastic_object'
             plastic_detections.append({
                 'type': obj_class,
                 'confidence': det[4],
@@ -49,30 +41,27 @@ def detect_plastic(frame):
             cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
             cv2.putText(frame, f"{obj_class} ({det[4]:.2f})", (x1, y1 - 10),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
-            # Log to CSV
+
             csv_writer.writerow([datetime.now(), obj_class, det[4], x_center, y_center])
     return plastic_detections, frame
 
-# Function to select the nearest target
 def select_nearest_target(detections):
     if not detections:
         return None
-    drone_img_x = (DRONE_POS[0] / SCREEN_WIDTH) * IMG_WIDTH
-    drone_img_y = (DRONE_POS[1] / SCREEN_HEIGHT) * IMG_HEIGHT
+    drone_img_x = (DRONE_POS[0] / SCREEN_WIDTH) * IMG_WIDTH if IMG_WIDTH else DRONE_POS[0]
+    drone_img_y = (DRONE_POS[1] / SCREEN_HEIGHT) * IMG_HEIGHT if IMG_HEIGHT else DRONE_POS[1]
     min_distance = float('inf')
     nearest_target = None
     for det in detections:
-        if det['type'] == 'bottle':  # Only target bottles
-            x, y = det['center']
-            distance = ((x - drone_img_x) ** 2 + (y - drone_img_y) ** 2) ** 0.5
-            if distance < min_distance:
-                min_distance = distance
-                nearest_target = det['center']
+        x, y = det['center']
+        distance = ((x - drone_img_x) ** 2 + (y - drone_img_y) ** 2) ** 0.5
+        if distance < min_distance:
+            min_distance = distance
+            nearest_target = det['center']
     if nearest_target:
         return map_coordinates(nearest_target[0], nearest_target[1])
     return None
 
-# Function to update drone position
 def update_drone_position(target_pos):
     global DRONE_POS
     if target_pos:
@@ -85,17 +74,14 @@ def update_drone_position(target_pos):
             return True
     return False
 
-# Function to map image coordinates to Pygame coordinates
 def map_coordinates(x, y):
-    x_mapped = (x / IMG_WIDTH) * SCREEN_WIDTH
-    y_mapped = (y / IMG_HEIGHT) * SCREEN_HEIGHT
+    x_mapped = (x / IMG_WIDTH) * SCREEN_WIDTH if IMG_WIDTH else (x / 640) * SCREEN_WIDTH
+    y_mapped = (y / IMG_HEIGHT) * SCREEN_HEIGHT if IMG_HEIGHT else (y / 480) * SCREEN_HEIGHT
     return int(x_mapped), int(y_mapped)
 
-# Main function
 def main():
-    global TARGET_POS
-    # Try video file first, fallback to webcam
-    video_source = 'test_video2.mp4'  # Replace with your video path
+    global TARGET_POS, IMG_WIDTH, IMG_HEIGHT
+    video_source = 'test_video2.mp4'
     cap = cv2.VideoCapture(video_source)
     if not cap.isOpened():
         print(f"Error: Could not open video file '{video_source}'. Trying webcam...")
@@ -104,6 +90,10 @@ def main():
             print("Error: Could not open webcam. Ensure video file exists or webcam is connected.")
             return
 
+    IMG_WIDTH = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+    IMG_HEIGHT = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    print(f"Video resolution: {IMG_WIDTH}x{IMG_HEIGHT}")
+
     running = True
     while running:
         ret, frame = cap.read()
@@ -111,10 +101,9 @@ def main():
             print("End of video or error reading frame.")
             break
 
-        frame = cv2.resize(frame, (IMG_WIDTH, IMG_HEIGHT))
         detections, annotated_frame = detect_plastic(frame)
+        annotated_frame = cv2.resize(annotated_frame, (640, 480))
 
-        # Update target position (select nearest bottle)
         if detections:
             TARGET_POS = select_nearest_target(detections)
             if TARGET_POS:
@@ -122,12 +111,12 @@ def main():
 
         moving = update_drone_position(TARGET_POS)
 
-        screen.fill((0, 0, 255))  # Blue background (water)
+        screen.fill((0, 0, 255))
         if TARGET_POS:
-            pygame.draw.circle(screen, (255, 0, 0), TARGET_POS, 10)  # Red dot on detected bottle
-        pygame.draw.circle(screen, (0, 255, 0), (int(DRONE_POS[0]), int(DRONE_POS[1])), 15)  # Green drone
+            pygame.draw.circle(screen, (255, 0, 0), TARGET_POS, 10) 
+        pygame.draw.circle(screen, (0, 255, 0), (int(DRONE_POS[0]), int(DRONE_POS[1])), 15)
         pygame.display.flip()
-        clock.tick(30)  # 30 FPS
+        clock.tick(30)
 
         cv2.imshow('Plastic Detection', annotated_frame)
         if cv2.waitKey(1) & 0xFF == ord('q'):
